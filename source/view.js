@@ -2520,10 +2520,7 @@ view.AttributeView = class extends view.Control {
             }
             case 'function': {
                 const line = this.createElement('div', 'sidebar-item-value-line-link');
-                line.innerHTML = value.type.name;
-                line.addEventListener('click', () => {
-                    this.emit('show-graph', value.type);
-                });
+                line.innerHTML = value.name;
                 this._element.appendChild(line);
                 break;
             }
@@ -2550,19 +2547,100 @@ view.AttributeView = class extends view.Control {
     }
 
     toggle() {
-        if (this._expander.innerText == '+') {
+        if (this._expander.innerText === '+') {
             this._expander.innerText = '-';
+            const typeLine = this.createElement('div', 'sidebar-item-value-line-link');
             const type = this._attribute.type;
             const value = this._attribute.value;
-            const content = type == 'tensor' && value && value.type ? value.type.toString() : this._attribute.type;
-            const typeLine = this.createElement('div', 'sidebar-item-value-line-border');
-            typeLine.innerHTML = 'type: ' + '<code><b>' + content + '</b></code>';
-            this._element.appendChild(typeLine);
+            if (type === 'tensor' && value && value.type) {
+                typeLine.innerHTML = 'type: ' + '<code><b>' + value.type.toString() + '</b></code>';
+                this._element.appendChild(typeLine);
+            } else if (!type.startsWith('function')) {
+                typeLine.innerHTML = 'type: ' + '<code><b>' + this._attribute.type + '</b></code>';
+                this._element.appendChild(typeLine);
+            }
             const description = this._attribute.description;
             if (description) {
                 const descriptionLine = this.createElement('div', 'sidebar-item-value-line-border');
                 descriptionLine.innerHTML = description;
                 this._element.appendChild(descriptionLine);
+            }
+            if (this._attribute.type === 'tensor' && value) {
+                const state = value.state;
+                const valueLine = this.createElement('div', 'sidebar-item-value-line-border');
+                const contentLine = this.createElement('pre');
+                contentLine.innerHTML = state || value.toString();
+                valueLine.appendChild(contentLine);
+                this._element.appendChild(valueLine);
+            } else if (this._attribute.type.startsWith('function') && value) {
+
+
+                // eslint-disable-next-line no-inner-declarations
+                function createInnerAttr(host, nav, innerAttr, indentNum, index) {
+                    const valueLineName = host.createElement('div');
+
+                    const expander = host.createElement('div');
+                    expander.className = 'sidebar-item-value-expander';
+                    expander.innerText = '+';
+                    valueLineName.appendChild(expander);
+                    expander.addEventListener('click', () => {
+                        // eslint-disable-next-line no-use-before-define
+                        toggleInnerFunc(host, valueLineName, expander, innerAttr, indentNum+1);
+                    });
+
+                    const contentLineName = host.createElement('div');
+                    contentLineName.className= 'sidebar-item-value-line';
+                    contentLineName.innerHTML = (innerAttr.name + (index!=undefined ? '['+index + ']' : '')).bold();
+                    contentLineName.style.paddingLeft = (6+indentNum*4).toString()+'px';
+                    valueLineName.appendChild(contentLineName);
+
+                    nav.appendChild(valueLineName);
+                }
+                // eslint-disable-next-line no-inner-declarations
+                function openFunction(host, nav, iInnerAttr, indentNum) {
+                    iInnerAttr.attr.forEach((v, k) => {
+                        const iValueLine = host.createElement('div', 'sidebar-item-value-line');
+                        iValueLine.style.paddingLeft=(6+indentNum*4).toString()+'px';
+                        switch (v.type) {
+                            case 'func':
+                                iValueLine.innerAttr =createInnerAttr (host, nav, v.value, indentNum+1);
+                                break;
+                            default:
+                                iValueLine.innerHTML = k.bold() + ":" + v.value.toString();
+                                nav.appendChild(iValueLine);
+                        }
+                    });
+                }
+
+
+                // eslint-disable-next-line no-inner-declarations
+                function openFunctionList(host, nav, l) {
+                    l.forEach((v, k) => {
+                        const indent = 1;
+                        const iValueLine = host.createElement('div', 'sidebar-item-value-line');
+                        iValueLine.innerAttr = createInnerAttr(host, nav, v, indent, k);
+                        iValueLine.style.paddingLeft = (6+indent*4).toString + 'px';
+                    });
+                }
+                if (this._attribute.type==='function') {
+                    openFunction(this._host.document, this._element, value, 1);
+                } else if (this._attribute.type==='function[]') {
+                    openFunctionList(this, this._element, value);
+                }
+
+                // eslint-disable-next-line no-inner-declarations
+                function toggleInnerFunc(host, nav, expander, iInnerAttr, indentNum) {
+                    if (expander.innerText==='+') {
+                        expander.innerText='-';
+                        openFunction(host, nav, iInnerAttr, indentNum);
+                    } else {
+                        expander.innerText='+';
+                        while (nav.childElementCount > 2) {
+                            nav.removeChild(nav.lastChild);
+                        }
+                    }
+
+                }
             }
         } else {
             this._expander.innerText = '+';
@@ -3947,10 +4025,10 @@ view.Formatter = class {
                 return '[...]';
             case 'object':
             case 'function':
-                return value.type.name;
+                return value.type;
             case 'object[]':
             case 'function[]':
-                return value ? value.map((item) => item.type.name).join(', ') : '(null)';
+                return "List";
             case 'type':
                 return value ? value.toString() : '(null)';
             case 'type[]':
