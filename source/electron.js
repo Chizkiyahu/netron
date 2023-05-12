@@ -3,8 +3,6 @@ var host = host || {};
 
 const electron = require('electron');
 const fs = require('fs');
-const http = require('http');
-const https = require('https');
 const process = require('process');
 const path = require('path');
 const base = require('./base');
@@ -59,65 +57,6 @@ host.ElectronHost = class {
         electron.ipcRenderer.on('open', (_, data) => {
             this._open(data);
         });
-        await this._age();
-        await this._consent();
-        await this._telemetry();
-    }
-
-    async _age() {
-        const age = (new Date() - new Date(this._environment.date)) / (24 * 60 * 60 * 1000);
-        if (age > 180) {
-            this._view.show('welcome');
-            this._terminate('Please update to the newest version.', 'Download', () => {
-                const link = this._element('logo-github').href;
-                this.openURL(link);
-            });
-            return new Promise(() => {});
-        }
-        return Promise.resolve();
-    }
-
-    async _consent() {
-        const time = this._getConfiguration('consent');
-        if (!time || (Date.now() - time) > 30 * 24 * 60 * 60 * 1000) {
-            let consent = true;
-            try {
-                const content = await this._request('https://ipinfo.io/json', { 'Content-Type': 'application/json' }, 2000);
-                const json = JSON.parse(content);
-                const countries = ['AT', 'BE', 'BG', 'HR', 'CZ', 'CY', 'DK', 'EE', 'FI', 'FR', 'DE', 'EL', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'NO', 'PL', 'PT', 'SK', 'ES', 'SE', 'GB', 'UK', 'GR', 'EU', 'RO'];
-                if (json && json.country && countries.indexOf(json.country) === -1) {
-                    consent = false;
-                }
-            } catch (error) {
-                // continue regardless of error
-            }
-            if (consent) {
-                await this._message('This app uses cookies to report errors and anonymous usage information.', 'Accept');
-            }
-            this._setConfiguration('consent', Date.now());
-        }
-    }
-
-    async _telemetry() {
-        if (this._environment.packaged) {
-            const measurement_id = '848W2NVWVH';
-            const user = this._getConfiguration('user') || null;
-            const session = this._getConfiguration('session') || null;
-            this._telemetry_ga4 = new base.Telemetry(this._window, 'G-' + measurement_id, user && user.indexOf('.') !== -1 ? user : null, session);
-            await this._telemetry_ga4.start();
-            this._telemetry_ga4.send('page_view', {
-                app_name: this.type,
-                app_version: this.version,
-            });
-            this._telemetry_ga4.send('scroll', {
-                percent_scrolled: 90,
-                app_name: this.type,
-                app_version: this.version
-            });
-            this._setConfiguration('user', this._telemetry_ga4.get('client_id'));
-            this._setConfiguration('session', this._telemetry_ga4.session);
-            this._telemetry_ua = new host.Telemetry('UA-54146-13', this._telemetry_ga4.get('client_id'), navigator.userAgent, this.type, this.version);
-        }
     }
 
     start() {
@@ -339,76 +278,17 @@ host.ElectronHost = class {
         electron.shell.openExternal(url);
     }
 
+    // eslint-disable-next-line no-unused-vars
     exception(error, fatal) {
-        if ((this._telemetry_ua || this._telemetry_ga4) && error) {
-            try {
-                const name = error.name ? error.name + ': ' : '';
-                const message = error.message ? error.message : JSON.stringify(error);
-                const description = name + message;
-                let context = '';
-                let stack = '';
-                if (error.stack) {
-                    const format = (file, line, column) => {
-                        return file.split('\\').join('/').split('/').pop() + ':' + line + ':' + column;
-                    };
-                    const match = error.stack.match(/\n {4}at (.*) \((.*):(\d*):(\d*)\)/);
-                    if (match) {
-                        stack = match[1] + ' (' + format(match[2], match[3], match[4]) + ')';
-                    } else {
-                        const match = error.stack.match(/\n {4}at (.*):(\d*):(\d*)/);
-                        if (match) {
-                            stack = '(' + format(match[1], match[2], match[3]) + ')';
-                        } else {
-                            const match = error.stack.match(/.*\n\s*(.*)\s*/);
-                            if (match) {
-                                stack = match[1];
-                            }
-                        }
-                    }
-                }
-                if (error.context) {
-                    context = typeof error.context === 'string' ? error.context : JSON.stringify(error.context);
-                }
-                if (this._telemetry_ua) {
-                    this._telemetry_ua.exception(stack ? description + ' @ ' + stack : description, fatal);
-                }
-                if (this._telemetry_ga4) {
-                    this._telemetry_ga4.send('exception', {
-                        app_name: this.type,
-                        app_version: this.version,
-                        error_name: name,
-                        error_message: message,
-                        error_context: context,
-                        error_stack: stack,
-                        error_fatal: fatal ? true : false
-                    });
-                }
-            } catch (e) {
-                // continue regardless of error
-            }
-        }
     }
 
+    // eslint-disable-next-line no-unused-vars
     event_ua(category, action, label, value) {
-        if (this._telemetry_ua && category && action && label) {
-            try {
-                this._telemetry_ua.event(category, action, label, value);
-            } catch (e) {
-                // continue regardless of error
-            }
-        }
+
     }
 
+    // eslint-disable-next-line no-unused-vars
     event(name, params) {
-        if (this._telemetry_ga4 && name && params) {
-            try {
-                params.app_name = this.type,
-                params.app_version = this.version,
-                this._telemetry_ga4.send(name, params);
-            } catch (e) {
-                // continue regardless of error
-            }
-        }
     }
 
     async _context(location) {
@@ -451,9 +331,6 @@ host.ElectronHost = class {
             this._view.show('welcome spinner');
             try {
                 const context = await this._context(path);
-                if (this._telemetry_ga4) {
-                    this._telemetry_ga4.set('session_engaged', 1);
-                }
                 try {
                     const model = await this._view.open(context);
                     this._view.show(null);
@@ -476,57 +353,6 @@ host.ElectronHost = class {
                 this._update({ path: null });
             }
         }
-    }
-
-    _request(location, headers, timeout) {
-        return new Promise((resolve, reject) => {
-            const url = new URL(location);
-            const protocol = url.protocol === 'https:' ? https : http;
-            const options = {};
-            options.headers = headers;
-            if (timeout) {
-                options.timeout = timeout;
-            }
-            const request = protocol.request(location, options, (response) => {
-                if (response.statusCode !== 200) {
-                    const err = new Error("The web request failed with status code " + response.statusCode + " at '" + location + "'.");
-                    err.type = 'error';
-                    err.url = location;
-                    err.status = response.statusCode;
-                    reject(err);
-                } else {
-                    let data = '';
-                    response.on('data', (chunk) => {
-                        data += chunk;
-                    });
-                    response.on('err', (err) => {
-                        reject(err);
-                    });
-                    response.on('end', () => {
-                        resolve(data);
-                    });
-                }
-            });
-            request.on("error", (err) => {
-                reject(err);
-            });
-            request.on("timeout", () => {
-                request.destroy();
-                const error = new Error("The web request timed out at '" + location + "'.");
-                error.type = 'timeout';
-                error.url = url;
-                reject(error);
-            });
-            request.end();
-        });
-    }
-
-    _getConfiguration(name) {
-        return electron.ipcRenderer.sendSync('get-configuration', { name: name });
-    }
-
-    _setConfiguration(name, value) {
-        electron.ipcRenderer.sendSync('set-configuration', { name: name, value: value });
     }
 
     _title(label) {
@@ -589,63 +415,6 @@ host.ElectronHost = class {
     }
 };
 
-host.Telemetry = class {
-
-    constructor(trackingId, clientId, userAgent, applicationName, applicationVersion) {
-        this._params = {
-            aip: '1', // anonymizeIp
-            tid: trackingId,
-            cid: clientId,
-            ua: userAgent,
-            an: applicationName,
-            av: applicationVersion
-        };
-    }
-
-    event(category, action, label, value) {
-        const params = Object.assign({}, this._params);
-        params.ec = category;
-        params.ea = action;
-        params.el = label;
-        params.ev = value;
-        this._send('event', params);
-    }
-
-    exception(description, fatal) {
-        const params = Object.assign({}, this._params);
-        params.exd = description;
-        if (fatal) {
-            params.exf = '1';
-        }
-        this._send('exception', params);
-    }
-
-    _send(type, params) {
-        params.t = type;
-        params.v = '1';
-        for (const param in params) {
-            if (params[param] === null || params[param] === undefined) {
-                delete params[param];
-            }
-        }
-        const body = Object.entries(params).map((entry) => encodeURIComponent(entry[0]) + '=' + encodeURIComponent(entry[1])).join('&');
-        const options = {
-            method: 'POST',
-            host: 'www.google-analytics.com',
-            path: '/collect',
-            headers: { 'Content-Length': Buffer.byteLength(body) }
-        };
-        const request = https.request(options, (response) => {
-            response.on('error', (/* error */) => {});
-        });
-        request.setTimeout(5000, () => {
-            request.destroy();
-        });
-        request.on('error', (/* error */) => {});
-        request.write(body);
-        request.end();
-    }
-};
 
 host.ElectronHost.FileStream = class {
 

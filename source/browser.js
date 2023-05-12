@@ -50,104 +50,7 @@ host.BrowserHost = class {
 
     view(view) {
         this._view = view;
-        return this._age().then(() => this._consent()).then(() => this._telemetry()).then(() => this._capabilities());
-    }
-
-    _age() {
-        const age = (new Date() - new Date(this._environment.date)) / (24 * 60 * 60 * 1000);
-        if (age > 180) {
-            this.document.body.classList.remove('spinner');
-            this.window.terminate('Please update to the newest version.', 'Download', () => {
-                const link = this._element('logo-github').href;
-                this.openURL(link);
-            });
-            return new Promise(() => {});
-        }
-        return Promise.resolve();
-    }
-
-    _consent() {
-        if (this._getCookie('consent') || this._getCookie('_ga')) {
-            return Promise.resolve();
-        }
-        const consent = () => {
-            return new Promise((resolve) => {
-                this.document.body.classList.remove('spinner');
-                this._message('This app uses cookies to report errors and anonymous usage information.', 'Accept').then(() => {
-                    this._setCookie('consent', Date.now().toString(), 30);
-                    resolve();
-                });
-            });
-        };
-        return this._request('https://ipinfo.io/json', { 'Content-Type': 'application/json' }, 'utf-8', null, 2000).then((text) => {
-            try {
-                const json = JSON.parse(text);
-                const countries = ['AT', 'BE', 'BG', 'HR', 'CZ', 'CY', 'DK', 'EE', 'FI', 'FR', 'DE', 'EL', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'NO', 'PL', 'PT', 'SK', 'ES', 'SE', 'GB', 'UK', 'GR', 'EU', 'RO'];
-                if (json && json.country && countries.indexOf(json.country) === -1) {
-                    this._setCookie('consent', Date.now().toString(), 30);
-                    return Promise.resolve();
-                }
-                return consent();
-            } catch (err) {
-                return consent();
-            }
-        }).catch(() => {
-            return consent();
-        });
-    }
-
-    _telemetry() {
-        if (this._environment.version && this._environment.version !== '0.0.0') {
-            this._window.addEventListener('error', (event) => {
-                const error = event instanceof ErrorEvent && event.error && event.error instanceof Error ? event.error : new Error(event && event.message ? event.message : JSON.stringify(event));
-                this.exception(error, true);
-            });
-            const ga4 = () => {
-                const base = require('./base');
-                const measurement_id = '848W2NVWVH';
-                const user = this._getCookie('_ga').replace(/^(GA1\.\d\.)*/, '');
-                const session = this._getCookie('_ga' + measurement_id);
-                this._telemetry_ga4 = new base.Telemetry(this._window, 'G-' + measurement_id, user, session);
-                return this._telemetry_ga4.start().then(() => {
-                    this._telemetry_ga4.set('page_location', this._document.location && this._document.location.href ? this._document.location.href : null);
-                    this._telemetry_ga4.set('page_title', this._document.title ? this._document.title : null);
-                    this._telemetry_ga4.set('page_referrer', this._document.referrer ? this._document.referrer : null);
-                    this._telemetry_ga4.send('page_view', {
-                        app_name: this.type,
-                        app_version: this.version,
-                    });
-                    this._telemetry_ga4.send('scroll', {
-                        percent_scrolled: 90,
-                        app_name: this.type,
-                        app_version: this.version
-                    });
-                    this._setCookie('_ga', 'GA1.2.' + this._telemetry_ga4.get('client_id'), 1200);
-                    this._setCookie('_ga' + measurement_id, 'GS1.1.' + this._telemetry_ga4.session, 1200);
-                });
-            };
-            const ua = () => {
-                return new Promise((resolve) => {
-                    this._telemetry_ua = true;
-                    const script = this.document.createElement('script');
-                    script.setAttribute('type', 'text/javascript');
-                    script.setAttribute('src', 'https://www.google-analytics.com/analytics.js');
-                    script.onload = () => {
-                        if (this.window.ga) {
-                            this.window.ga.l = 1 * new Date();
-                            this.window.ga('create', 'UA-54146-13', 'auto');
-                            this.window.ga('set', 'anonymizeIp', true);
-                        }
-                        resolve();
-                    };
-                    script.onerror = () => {
-                        resolve();
-                    };
-                    this.document.body.appendChild(script);
-                });
-            };
-            return ga4().then(() => ua());
-        }
-        return Promise.resolve();
+        return  this._capabilities();
     }
 
     _capabilities() {
@@ -318,86 +221,16 @@ host.BrowserHost = class {
         this.window.location = url;
     }
 
+    // eslint-disable-next-line no-unused-vars
     exception(error, fatal) {
-        if ((this._telemetry_ua || this._telemetry_ga4) && error) {
-            const name = error.name ? error.name + ': ' : '';
-            const message = error.message ? error.message : JSON.stringify(error);
-            const description = name + message;
-            let context = '';
-            let stack = '';
-            if (error.stack) {
-                const format = (file, line, column) => {
-                    return file.split('\\').join('/').split('/').pop() + ':' + line + ':' + column;
-                };
-                const match = error.stack.match(/\n {4}at (.*) \((.*):(\d*):(\d*)\)/);
-                if (match) {
-                    stack = match[1] + ' (' + format(match[2], match[3], match[4]) + ')';
-                } else {
-                    const match = error.stack.match(/\n {4}at (.*):(\d*):(\d*)/);
-                    if (match) {
-                        stack = '(' + format(match[1], match[2], match[3]) + ')';
-                    } else {
-                        const match = error.stack.match(/\n {4}at (.*)\((.*)\)/);
-                        if (match) {
-                            stack = '(' + format(match[1], match[2], match[3]) + ')';
-                        } else {
-                            const match = error.stack.match(/\s*@\s*(.*):(.*):(.*)/);
-                            if (match) {
-                                stack = '(' + format(match[1], match[2], match[3]) + ')';
-                            } else {
-                                const match = error.stack.match(/.*\n\s*(.*)\s*/);
-                                if (match) {
-                                    stack = match[1];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if (error.context) {
-                context = typeof error.context === 'string' ? error.context : JSON.stringify(error.context);
-            }
-            if (this._telemetry_ua && this.window.ga) {
-                this.window.ga('send', 'exception', {
-                    exDescription: stack ? description + ' @ ' + stack : description,
-                    exFatal: fatal,
-                    appName: this.type,
-                    appVersion: this.version
-                });
-            }
-            if (this._telemetry_ga4) {
-                this._telemetry_ga4.send('exception', {
-                    app_name: this.type,
-                    app_version: this.version,
-                    error_name: name,
-                    error_message: message,
-                    error_context: context,
-                    error_stack: stack,
-                    error_fatal: fatal ? true : false
-                });
-            }
-        }
     }
 
+    // eslint-disable-next-line no-unused-vars
     event_ua(category, action, label, value) {
-        if (this._telemetry_ua && this.window.ga && category && action && label) {
-            this.window.ga('send', 'event', {
-                eventCategory: category,
-                eventAction: action,
-                eventLabel: label,
-                eventValue: value,
-                appName: this.type,
-                appVersion: this.version
-            });
-        }
     }
 
+    // eslint-disable-next-line no-unused-vars
     event(name, params) {
-        if (this._telemetry_ga4 && name && params) {
-            params.app_name = this.type,
-            params.app_version = this.version,
-            this._telemetry_ga4.send(name, params);
-        }
     }
 
     _request(url, headers, encoding, callback, timeout) {
@@ -481,9 +314,6 @@ host.BrowserHost = class {
         };
         return this._request(url, null, null, progress).then((stream) => {
             const context = new host.BrowserHost.Context(this, url, identifier, stream);
-            if (this._telemetry_ga4) {
-                this._telemetry_ga4.set('session_engaged', 1);
-            }
             return this._view.open(context).then(() => {
                 return identifier || context.identifier;
             }).catch((err) => {
@@ -502,9 +332,6 @@ host.BrowserHost = class {
         this._view.show('welcome spinner');
         const context = new host.BrowserHost.BrowserFileContext(this, file, files);
         context.open().then(() => {
-            if (this._telemetry_ga4) {
-                this._telemetry_ga4.set('session_engaged', 1);
-            }
             return this._view.open(context).then((model) => {
                 this._view.show(null);
                 this.document.title = files[0].name;
@@ -534,9 +361,6 @@ host.BrowserHost = class {
             const buffer = encoder.encode(file.content);
             const stream = new base.BinaryStream(buffer);
             const context = new host.BrowserHost.Context(this, '', identifier, stream);
-            if (this._telemetry_ga4) {
-                this._telemetry_ga4.set('session_engaged', 1);
-            }
             this._view.open(context).then(() => {
                 this.document.title = identifier;
             }).catch((error) => {
@@ -551,48 +375,8 @@ host.BrowserHost = class {
         });
     }
 
-    _setCookie(name, value, days) {
-        this.document.cookie = name + '=; Max-Age=0';
-        const location = this.window.location;
-        const domain = location && location.hostname && location.hostname.indexOf('.') !== -1 ? ';domain=.' + location.hostname.split('.').slice(-2).join('.') : '';
-        const date = new Date();
-        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-        this.document.cookie = name + "=" + value + domain + ";path=/;expires=" + date.toUTCString();
-    }
-
-    _getCookie(name) {
-        for (const cookie of this.document.cookie.split(';')) {
-            const entry = cookie.split('=');
-            if (entry[0].trim() === name) {
-                return entry[1].trim();
-            }
-        }
-        return '';
-    }
-
     _element(id) {
         return this.document.getElementById(id);
-    }
-
-    _message(message, action) {
-        return new Promise((resolve) => {
-            this._element('message-text').innerText = message;
-            const button = this._element('message-button');
-            if (action) {
-                button.style.removeProperty('display');
-                button.innerText = action;
-                button.onclick = () => {
-                    button.onclick = null;
-                    this._document.body.classList.remove('message');
-                    resolve();
-                };
-                button.focus();
-            } else {
-                button.style.display = 'none';
-                button.onclick = null;
-            }
-            this._document.body.classList.add('message');
-        });
     }
 };
 
