@@ -6,7 +6,7 @@ on:
 
   workflow_dispatch:
 
-permissions: read-all|write-all
+permissions: write-all
 
 jobs:
   sync_latest_from_upstream:
@@ -30,8 +30,10 @@ jobs:
           upstream_sync_branch: main
           upstream_sync_repo: lutzroeder/netron
           git_config_pull_rebase: 'true'
+          target_branch_push_args: '--force'
 
-#          # Set test_mode true to run tests instead of the true action!!
+
+      #          # Set test_mode true to run tests instead of the true action!!
 #          test_mode: true
 
       # Step 3: Display a sample message based on the sync output var 'has_new_commits'
