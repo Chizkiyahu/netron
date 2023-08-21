@@ -1,7 +1,7 @@
 
 /* eslint-env es2015 */
 
-if (window.location.hostname.endsWith('.github.io')) {
+if (window.location.hostname.endsWith('lutzroeder.github.io')) {
     window.location.replace('https://netron.app');
 }
 
