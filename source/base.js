@@ -1042,7 +1042,8 @@ base.Telemetry = class {
     }
 
     send(name, params) {
-        if (this._session) {
+        // eslint-disable-next-line no-constant-condition
+        if (this._session && false) {
             try {
                 params = Object.assign({ event_name: name }, this._metadata, /* { debug_mode: true },*/ params);
                 this._metadata = {};
